@@ -37,16 +37,6 @@ func (pd *ProtoDefinition) Filename() string {
 	return path.Join(goPackage[:index], path.Base(pd.descriptor.Path()))
 }
 
-func NewFromBytes(payload []byte) (*ProtoDefinition, error) {
-	var pb descriptorpb.FileDescriptorProto
-	err := proto.Unmarshal(payload, &pb)
-	if err != nil {
-		return nil, fmt.Errorf("Couldn't unmarshal proto: %w", err)
-	}
-
-	return NewFromDescriptor(&pb)
-}
-
 func FixGoogleBinaryDescriptorProto(fd *descriptorpb.FileDescriptorProto) {
 	// Replace dependency if present
 	for i, dep := range fd.Dependency {
@@ -88,19 +78,45 @@ func FixUnsupportedEdition(fd *descriptorpb.FileDescriptorProto) {
 	}
 }
 
-func NewFromDescriptor(pb *descriptorpb.FileDescriptorProto) (*ProtoDefinition, error) {
-	FixGoogleBinaryDescriptorProto(pb)
-	FixUnsupportedEdition(pb)
-	fileOptions := protodesc.FileOptions{AllowUnresolvable: true}
-	descriptor, err := fileOptions.New(pb, &protoregistry.Files{})
+func tryUnmarshalAndValidate(payload []byte) (*descriptorpb.FileDescriptorProto, protoreflect.FileDescriptor, error) {
+	var pb descriptorpb.FileDescriptorProto
+	if err := proto.Unmarshal(payload, &pb); err != nil {
+		return nil, nil, err
+	}
+	if pb.GetName() == "" {
+		return nil, nil, fmt.Errorf("empty filename")
+	}
 
+	FixGoogleBinaryDescriptorProto(&pb)
+	FixUnsupportedEdition(&pb)
+
+	fileOptions := protodesc.FileOptions{AllowUnresolvable: true}
+	desc, err := fileOptions.New(&pb, &protoregistry.Files{})
 	if err != nil {
-		return nil, fmt.Errorf("Couldn't create FileDescriptor: %w", err)
+		return nil, nil, err
+	}
+	return &pb, desc, nil
+}
+
+func NewFromBytes(payload []byte) (*ProtoDefinition, error) {
+	pb, desc, err := tryUnmarshalAndValidate(payload)
+	if err != nil {
+		recovered := false
+		for trim := len(payload) - 1; trim > 10; trim-- {
+			if pbTrimmed, descTrimmed, errTrimmed := tryUnmarshalAndValidate(payload[:trim]); errTrimmed == nil {
+				pb, desc = pbTrimmed, descTrimmed
+				recovered = true
+				break
+			}
+		}
+		if !recovered {
+			return nil, fmt.Errorf("Couldn't unmarshal proto: %w", err)
+		}
 	}
 
 	pd := ProtoDefinition{
 		pb:         pb,
-		descriptor: descriptor,
+		descriptor: desc,
 	}
 
 	return &pd, nil

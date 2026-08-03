@@ -3,14 +3,15 @@ package protodump
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"maps"
+	"os"
 	"slices"
 
 	"google.golang.org/protobuf/encoding/protowire"
 )
 
 const scan = ".proto"
+
 var tags = map[string]uint64{
 	"name":              0xa,
 	"package":           0x12,
@@ -32,7 +33,7 @@ func consumeBytes(data []byte, position int, requiredFields int) (int, error) {
 	validTags := slices.Collect(maps.Values(tags))
 	seenName := false
 	seenFields := 0
-	
+
 	for {
 		if position >= len(data) {
 			goto EndOfData
