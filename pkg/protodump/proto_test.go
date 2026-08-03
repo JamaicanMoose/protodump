@@ -56,10 +56,16 @@ func TestDefinitions(t *testing.T) {
 			expected, err := os.ReadFile(filePath)
 			require.NoError(t, err)
 
-			actual, err := NewFromDescriptor(descriptor)
+			data, err := proto.Marshal(descriptor)
 			require.NoError(t, err)
 
-			assert.Equal(t, string(expected), actual.String())
+			actual, err := NewFromBytes(data)
+			require.NoError(t, err)
+
+			actualStr, err := actual.String()
+			require.NoError(t, err)
+
+			assert.Equal(t, string(expected), actualStr)
 		})
 	}
 }

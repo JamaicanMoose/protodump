@@ -20,11 +20,11 @@ type ProtoDefinition struct {
 
 func (pd *ProtoDefinition) String() (string, error) {
 	printer := protoprint.Printer{}
-	protostr, err := printer.PrintProtoToString(desc)
+	protostr, err := printer.PrintProtoToString(pd.descriptor)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return protostr
+	return protostr, nil
 }
 
 func (pd *ProtoDefinition) Filename() string {

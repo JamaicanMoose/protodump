@@ -79,6 +79,7 @@ func main() {
 	var output = flag.String("output", cwd, "The output directory to save definitions in (will be created if it doesn't exist). Defaults to current directory.")
 	flag.BoolVar(&debug, "v", false, "Verbose output")
 	var requiredFields = flag.Int("requiredFields", 3, "Minimum number of successfully parsed fields to be considered a valid FileDescriptorProto.")
+	var pruneTarget = flag.String("prune", "", "Comma-separated list of target messages/services to keep. If provided, all other messages and files not in their dependency graph will be pruned.")
 	flag.Parse()
 
 	if *file == "" {
@@ -97,27 +98,44 @@ func main() {
 		log.Fatalf("Failed to create output folder %s: %v\n", *output, err)
 	}
 
+	var definitions []*protodump.ProtoDefinition
 	for _, result := range results {
 		definition, err := protodump.NewFromBytes(result)
 		if err != nil {
 			Debug("Got error parsing definition: %v\n", err)
 		} else {
+			definitions = append(definitions, definition)
+		}
+	}
 
-			filename := definition.Filename()
-			if strings.HasSuffix(filename, ".proto") {
-				protostr, err := definition.String()
-				if err != nil {
-					fmt.Printf("Failed to stringify %s: %v\n", filename, err)
-				}
-				final, err := writeFile(*output, filename, []byte(definition.String()))
-				if err != nil {
-					fmt.Printf("Failed to write %s: %v\n", final, err)
-				} else {
-					fmt.Printf("Wrote %s\n", final)
-				}
-			} else {
-				// Need to investigate further
+	if *pruneTarget != "" {
+		targets := strings.Split(*pruneTarget, ",")
+		for i := range targets {
+			targets[i] = strings.TrimSpace(targets[i])
+		}
+
+		definitions, err = protodump.PruneDefinitions(definitions, targets)
+		if err != nil {
+			log.Fatalf("Got error pruning definitions: %v\n", err)
+		}
+	}
+
+	for _, definition := range definitions {
+		filename := definition.Filename()
+		if strings.HasSuffix(filename, ".proto") {
+			str, err := definition.String()
+			if err != nil {
+				fmt.Printf("Failed to format %s: %v\n", filename, err)
+				continue
 			}
+			final, err := writeFile(*output, filename, []byte(str))
+			if err != nil {
+				fmt.Printf("Failed to write %s: %v\n", final, err)
+			} else {
+				fmt.Printf("Wrote %s\n", final)
+			}
+		} else {
+			// Need to investigate further
 		}
 	}
 }
