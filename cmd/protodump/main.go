@@ -78,6 +78,7 @@ func main() {
 	var file = flag.String("file", "", "The file to extract definitions from")
 	var output = flag.String("output", cwd, "The output directory to save definitions in (will be created if it doesn't exist). Defaults to current directory.")
 	flag.BoolVar(&debug, "v", false, "Verbose output")
+	var requiredFields = flag.Int("requiredFields", 3, "Minimum number of successfully parsed fields to be considered a valid FileDescriptorProto.")
 	flag.Parse()
 
 	if *file == "" {
@@ -86,7 +87,7 @@ func main() {
 		return
 	}
 
-	results, err := protodump.ScanFile(*file)
+	results, err := protodump.ScanFile(*file, *requiredFields)
 	if err != nil {
 		log.Fatalf("Got error scanning: %v\n", err)
 	}
@@ -104,6 +105,10 @@ func main() {
 
 			filename := definition.Filename()
 			if strings.HasSuffix(filename, ".proto") {
+				protostr, err := definition.String()
+				if err != nil {
+					fmt.Printf("Failed to stringify %s: %v\n", filename, err)
+				}
 				final, err := writeFile(*output, filename, []byte(definition.String()))
 				if err != nil {
 					fmt.Printf("Failed to write %s: %v\n", final, err)
