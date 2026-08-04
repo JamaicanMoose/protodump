@@ -37,6 +37,44 @@ func (pd *ProtoDefinition) Filename() string {
 	return path.Join(goPackage[:index], path.Base(pd.descriptor.Path()))
 }
 
+func (pd *ProtoDefinition) Package() string {
+	if pd.descriptor != nil {
+		return string(pd.descriptor.Package())
+	}
+	if pd.pb != nil {
+		return pd.pb.GetPackage()
+	}
+	return ""
+}
+
+func ExcludePackages(defs []*ProtoDefinition, excludedPackages []string) []*ProtoDefinition {
+	if len(excludedPackages) == 0 {
+		return defs
+	}
+
+	excluded := make(map[string]bool)
+	for _, p := range excludedPackages {
+		p = strings.TrimPrefix(strings.TrimSpace(p), ".")
+		if p != "" {
+			excluded[p] = true
+		}
+	}
+
+	if len(excluded) == 0 {
+		return defs
+	}
+
+	var result []*ProtoDefinition
+	for _, def := range defs {
+		pkg := strings.TrimPrefix(def.Package(), ".")
+		if !excluded[pkg] {
+			result = append(result, def)
+		}
+	}
+
+	return result
+}
+
 func FixGoogleBinaryDescriptorProto(fd *descriptorpb.FileDescriptorProto) {
 	// Replace dependency if present
 	for i, dep := range fd.Dependency {

@@ -80,6 +80,10 @@ func main() {
 	flag.BoolVar(&debug, "v", false, "Verbose output")
 	var requiredFields = flag.Int("requiredFields", 3, "Minimum number of successfully parsed fields to be considered a valid FileDescriptorProto.")
 	var pruneTarget = flag.String("prune", "", "Comma-separated list of target messages/services to keep. If provided, all other messages and files not in their dependency graph will be pruned.")
+	var excludeStr string
+	flag.StringVar(&excludeStr, "exclude", "", "Comma-separated list of packages to exclude from the returned protos.")
+	flag.StringVar(&excludeStr, "excludePackages", "", "Comma-separated list of packages to exclude from the returned protos.")
+	flag.StringVar(&excludeStr, "exclude-packages", "", "Comma-separated list of packages to exclude from the returned protos.")
 	flag.Parse()
 
 	if *file == "" {
@@ -108,6 +112,12 @@ func main() {
 		}
 	}
 
+	for _, definition := range definitions {
+		if strings.Contains(definition.Filename(), "trajectory_steps") {
+			fmt.Println(definition.String())
+		}
+	}
+
 	if *pruneTarget != "" {
 		targets := strings.Split(*pruneTarget, ",")
 		for i := range targets {
@@ -118,6 +128,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("Got error pruning definitions: %v\n", err)
 		}
+	}
+
+	if excludeStr != "" {
+		pkgs := strings.Split(excludeStr, ",")
+		definitions = protodump.ExcludePackages(definitions, pkgs)
 	}
 
 	for _, definition := range definitions {
