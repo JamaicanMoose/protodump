@@ -453,4 +453,72 @@ func TestPruneRepeatedEnumOption(t *testing.T) {
 	require.NotEmpty(t, pruned)
 }
 
+func TestFixGoogleBinaryDescriptorProtoAndPrune(t *testing.T) {
+	fdGoFeatures := &descriptorpb.FileDescriptorProto{
+		Name:    proto.String("third_party/golang/protobuf/v2/src/google/protobuf/go_features.proto"),
+		Package: proto.String("google.protobuf"),
+		Syntax:  proto.String("proto3"),
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: proto.String("GoFeatures"),
+			},
+		},
+	}
+
+	fdApp := &descriptorpb.FileDescriptorProto{
+		Name:       proto.String("app.proto"),
+		Package:    proto.String("apppkg"),
+		Syntax:     proto.String("proto3"),
+		Dependency: []string{"third_party/golang/protobuf/v2/src/google/protobuf/go_features.proto"},
+		MessageType: []*descriptorpb.DescriptorProto{
+			{
+				Name: proto.String("TargetMessage"),
+				Field: []*descriptorpb.FieldDescriptorProto{
+					{
+						Name:     proto.String("feat"),
+						Number:   proto.Int32(1),
+						Label:    descriptorpb.FieldDescriptorProto_LABEL_OPTIONAL.Enum(),
+						Type:     descriptorpb.FieldDescriptorProto_TYPE_MESSAGE.Enum(),
+						TypeName: proto.String(".google.protobuf.GoFeatures"),
+					},
+				},
+			},
+		},
+	}
+
+	FixGoogleBinaryDescriptorProto(fdGoFeatures)
+	FixGoogleBinaryDescriptorProto(fdApp)
+
+	assert.Equal(t, "google/protobuf/go_features.proto", fdGoFeatures.GetName())
+	assert.Equal(t, []string{"google/protobuf/go_features.proto"}, fdApp.Dependency)
+
+	var reg protoregistry.Files
+	descGoFeatures, err := protodesc.FileOptions{AllowUnresolvable: true}.New(fdGoFeatures, &reg)
+	require.NoError(t, err)
+	reg.RegisterFile(descGoFeatures)
+
+	descApp, err := protodesc.FileOptions{AllowUnresolvable: true}.New(fdApp, &reg)
+	require.NoError(t, err)
+
+	defs := []*ProtoDefinition{
+		{pb: fdGoFeatures, descriptor: descGoFeatures},
+		{pb: fdApp, descriptor: descApp},
+	}
+
+	pruned, err := PruneDefinitions(defs, []string{"apppkg.TargetMessage"})
+	require.NoError(t, err)
+	require.Len(t, pruned, 2)
+
+	var appDef *ProtoDefinition
+	for _, def := range pruned {
+		if def.pb.GetName() == "app.proto" {
+			appDef = def
+			break
+		}
+	}
+	require.NotNil(t, appDef)
+	assert.Equal(t, []string{"google/protobuf/go_features.proto"}, appDef.pb.Dependency)
+}
+
+
 

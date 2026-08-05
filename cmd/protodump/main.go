@@ -84,6 +84,7 @@ func main() {
 	flag.StringVar(&excludeStr, "exclude", "", "Comma-separated list of packages to exclude from the returned protos.")
 	flag.StringVar(&excludeStr, "excludePackages", "", "Comma-separated list of packages to exclude from the returned protos.")
 	flag.StringVar(&excludeStr, "exclude-packages", "", "Comma-separated list of packages to exclude from the returned protos.")
+	var goModule = flag.String("go-module", "", "Go module path prefix for generated go_package options")
 	flag.Parse()
 
 	if *file == "" {
@@ -112,12 +113,6 @@ func main() {
 		}
 	}
 
-	for _, definition := range definitions {
-		if strings.Contains(definition.Filename(), "trajectory_steps") {
-			fmt.Println(definition.String())
-		}
-	}
-
 	if *pruneTarget != "" {
 		targets := strings.Split(*pruneTarget, ",")
 		for i := range targets {
@@ -133,6 +128,11 @@ func main() {
 	if excludeStr != "" {
 		pkgs := strings.Split(excludeStr, ",")
 		definitions = protodump.ExcludePackages(definitions, pkgs)
+	}
+
+	definitions, err = protodump.ResolveGoPackageCycles(definitions, *goModule)
+	if err != nil {
+		log.Fatalf("Got error resolving Go package cycles: %v\n", err)
 	}
 
 	for _, definition := range definitions {

@@ -2,7 +2,6 @@ package protodump
 
 import (
 	"fmt"
-	"path"
 	"strings"
 
 	"google.golang.org/protobuf/proto"
@@ -10,6 +9,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/encoding/prototext"
 )
 import "github.com/jhump/protoreflect/v2/protoprint"
 
@@ -27,14 +27,12 @@ func (pd *ProtoDefinition) String() (string, error) {
 	return protostr, nil
 }
 
-func (pd *ProtoDefinition) Filename() string {
-	goPackage := pd.pb.GetOptions().GetGoPackage()
-	index := strings.Index(goPackage, ";")
-	if index == -1 {
-		return pd.descriptor.Path()
-	}
+func (pd *ProtoDefinition) Def() string {
+	return prototext.Format(pd.pb)
+}
 
-	return path.Join(goPackage[:index], path.Base(pd.descriptor.Path()))
+func (pd *ProtoDefinition) Filename() string {
+	return pd.descriptor.Path()
 }
 
 func (pd *ProtoDefinition) Package() string {
@@ -75,11 +73,37 @@ func ExcludePackages(defs []*ProtoDefinition, excludedPackages []string) []*Prot
 	return result
 }
 
+var google3PathReplacements = map[string]string{
+	"net/proto2/proto/descriptor.proto":                                     "google/protobuf/descriptor.proto",
+	"third_party/golang/protobuf/v2/src/google/protobuf/go_features.proto": "google/protobuf/go_features.proto",
+}
+
+func replaceInternalPath(p string) string {
+	parts := strings.Split(p, "/")
+	for i, part := range parts {
+		if part == "internal" {
+			parts[i] = "v1internal"
+		}
+	}
+	return strings.Join(parts, "/")
+}
+
 func FixGoogleBinaryDescriptorProto(fd *descriptorpb.FileDescriptorProto) {
+	// Replace file name if present
+	if newName, ok := google3PathReplacements[fd.GetName()]; ok {
+		fd.Name = proto.String(newName)
+	}
+
+	if strings.Contains(fd.GetName(), "internal/") {
+		fd.Name = proto.String(replaceInternalPath(fd.GetName()))
+	}
+
 	// Replace dependency if present
 	for i, dep := range fd.Dependency {
-		if dep == "net/proto2/proto/descriptor.proto" {
-			fd.Dependency[i] = "google/protobuf/descriptor.proto"
+		if newDep, ok := google3PathReplacements[dep]; ok {
+			fd.Dependency[i] = newDep
+		} else if strings.Contains(dep, "internal/") {
+			fd.Dependency[i] = replaceInternalPath(dep)
 		}
 	}
 
